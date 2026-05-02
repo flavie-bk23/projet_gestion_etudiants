@@ -1,0 +1,656 @@
+{% extends "base.html" %}
+{% block title %}Statistiques — UniGestion{% endblock %}
+{% block content %}
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<style>
+  .stats-page {
+    padding: clamp(40px,5vw,64px) clamp(16px,4vw,64px);
+    max-width: 1160px;
+    margin: 0 auto;
+  }
+
+  .page-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  .page-eyebrow {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--accent); margin-bottom: 6px;
+  }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-size: clamp(24px, 3.5vw, 36px);
+    font-weight: 800; letter-spacing: -0.025em;
+    color: var(--text); line-height: 1.1;
+  }
+
+  .head-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .btn-sm {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 16px; font-size: 13.5px; font-weight: 500;
+    border-radius: var(--radius-sm); text-decoration: none;
+    transition: all 0.2s; white-space: nowrap;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+  }
+  .btn-sm:hover { border-color: var(--border-hover); color: var(--text); }
+  .btn-sm.accent { background: rgba(91,127,255,0.1); border-color: rgba(91,127,255,0.25); color: var(--accent); }
+  .btn-sm svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Section heading */
+  .sec-head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 20px;
+  }
+  .sec-head h2 {
+    font-family: var(--font-display); font-size: 16px; font-weight: 700;
+    color: var(--text); white-space: nowrap;
+  }
+  .sec-line { flex: 1; height: 1px; background: var(--border); }
+
+  /* KPI grid */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 14px;
+    margin-bottom: 40px;
+  }
+
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 18px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .kpi:hover { border-color: var(--border-hover); transform: translateY(-3px); }
+  .kpi::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  }
+
+  .kpi-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-muted); margin-bottom: 10px; }
+  .kpi-val { font-family: var(--font-display); font-size: 28px; font-weight: 800; letter-spacing: -0.02em; color: var(--text); line-height: 1; margin-bottom: 6px; }
+  .kpi-val.green { color: var(--green); }
+  .kpi-val.amber { color: var(--amber); }
+  .kpi-val.red   { color: var(--red); }
+  .kpi-val.blue  { color: var(--accent); }
+  .kpi-sub { font-size: 12px; color: var(--text-muted); }
+
+  /* Podium */
+  .podium-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px; margin-bottom: 40px;
+  }
+
+  .podium {
+    display: flex; align-items: center; gap: 16px;
+    padding: 20px 22px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: transform 0.2s;
+  }
+  .podium:hover { transform: translateY(-3px); }
+  .podium.best  { background: rgba(52,211,153,0.05); border-color: rgba(52,211,153,0.18); }
+  .podium.worst { background: rgba(248,113,113,0.05); border-color: rgba(248,113,113,0.18); }
+
+  .podium-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .podium.best  .podium-icon { background: rgba(52,211,153,0.12); }
+  .podium.worst .podium-icon { background: rgba(248,113,113,0.1); }
+  .podium-icon svg { width: 20px; height: 20px; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+  .podium.best  .podium-icon svg { stroke: var(--green); }
+  .podium.worst .podium-icon svg { stroke: var(--red); }
+
+  .podium-info { display: flex; flex-direction: column; gap: 3px; }
+  .podium-type { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+  .podium.best  .podium-type { color: var(--green); }
+  .podium.worst .podium-type { color: var(--red); }
+  .podium-name { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--text); }
+  .podium-moy  { font-size: 12.5px; color: var(--text-muted); }
+
+  /* Charts */
+  .charts-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 14px; margin-bottom: 40px;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 16px;
+    transition: border-color 0.2s;
+  }
+  .chart-card:hover { border-color: var(--border-hover); }
+
+  .chart-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text); }
+  .chart-sub   { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Stats descriptives */
+  .desc-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 14px; margin-bottom: 40px;
+  }
+
+  .desc-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    transition: border-color 0.2s;
+  }
+  .desc-card:hover { border-color: var(--border-hover); }
+
+  .desc-title {
+    font-family: var(--font-display); font-size: 14px; font-weight: 700;
+    color: var(--text); margin-bottom: 16px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .desc-rows { display: flex; flex-direction: column; gap: 9px; }
+
+  .desc-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+
+  .desc-key { font-size: 12.5px; color: var(--text-muted); }
+  .desc-val { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--text); }
+  .desc-val.green { color: var(--green); }
+  .desc-val.red   { color: var(--red); }
+
+  .prog-wrap { flex: 1; height: 3px; background: var(--border); border-radius: 3px; min-width: 60px; max-width: 80px; }
+  .prog-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 3px; }
+
+  /* Filière table */
+  .table-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; margin-bottom: 40px;
+  }
+  .table-wrap table { width: 100%; border-collapse: collapse; }
+  .table-wrap thead { background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .table-wrap thead th { padding: 12px 18px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-muted); text-align: left; }
+  .table-wrap tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  .table-wrap tbody tr:last-child { border-bottom: none; }
+  .table-wrap tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .table-wrap tbody td { padding: 13px 18px; font-size: 14px; color: var(--text); vertical-align: middle; }
+
+  .prog-cell { display: flex; align-items: center; gap: 12px; }
+  .prog-bar-wrap { flex: 1; height: 5px; background: var(--border); border-radius: 4px; min-width: 80px; }
+  .prog-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 4px; }
+  .prog-pct { font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--text-muted); min-width: 38px; text-align: right; }
+
+  .moy { font-family: var(--font-display); font-weight: 700; }
+  .moy-h { color: var(--green); }
+  .moy-m { color: var(--amber); }
+  .moy-l { color: var(--red); }
+
+  /* Classement */
+  .rank-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 50%;
+    font-family: var(--font-display); font-size: 13px; font-weight: 700;
+  }
+  .rank-1 { background: rgba(251,191,36,0.12); color: var(--amber); border: 1.5px solid rgba(251,191,36,0.3); }
+  .rank-2 { background: rgba(148,163,184,0.1); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
+  .rank-3 { background: rgba(251,146,60,0.1); color: #fb923c; border: 1px solid rgba(251,146,60,0.2); }
+  .rank-n { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); font-size: 12px; }
+
+  .stu-cell { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; background: rgba(91,127,255,0.1); border: 1px solid rgba(91,127,255,0.2); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 11px; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+
+  @media (max-width: 800px) {
+    .charts-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .page-head { flex-direction: column; }
+    .kpi-grid { grid-template-columns: repeat(2,1fr); }
+    .podium-grid { grid-template-columns: 1fr; }
+    .table-wrap thead { display: none; }
+    .table-wrap tbody tr { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; }
+    .table-wrap tbody td { padding: 0; display: flex; align-items: center; justify-content: space-between; }
+    .table-wrap tbody td::before { content: attr(data-label); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+  }
+</style>
+
+<div class="stats-page">
+
+  <!-- Header -->
+  <div class="page-head">
+    <div>
+      <div class="page-eyebrow">Tableau de bord</div>
+      <h1 class="page-title">Analyse académique</h1>
+    </div>
+    <div class="head-actions">
+      <a href="/" class="btn-sm">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        Accueil
+      </a>
+      <a href="/liste" class="btn-sm accent">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Liste
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI -->
+  <div class="sec-head"><h2>Vue d'ensemble</h2><div class="sec-line"></div></div>
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">Total étudiants</div>
+      <div class="kpi-val">{{ total.total }}</div>
+      <div class="kpi-sub">Inscrits</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Moyenne générale</div>
+      <div class="kpi-val {% if moyenne.moy and moyenne.moy >= 14 %}green{% elif moyenne.moy and moyenne.moy >= 10 %}amber{% else %}red{% endif %}">
+        {{ "%.2f"|format(moyenne.moy or 0) }}
+      </div>
+      <div class="kpi-sub">Sur 20 points</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Meilleure filière</div>
+      <div class="kpi-val green" style="font-size:18px;">{{ meilleure_filiere.filiere if meilleure_filiere else '—' }}</div>
+      <div class="kpi-sub">Moy. {{ "%.2f"|format(meilleure_filiere.moy or 0) if meilleure_filiere else '—' }}/20</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Filière faible</div>
+      <div class="kpi-val red" style="font-size:18px;">{{ pire_filiere.filiere if pire_filiere else '—' }}</div>
+      <div class="kpi-sub">Moy. {{ "%.2f"|format(pire_filiere.moy or 0) if pire_filiere else '—' }}/20</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Taux de réussite</div>
+      <div class="kpi-val green" id="kpi-reussite">—</div>
+      <div class="kpi-sub">Moyenne ≥ 10/20</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Filières</div>
+      <div class="kpi-val blue">{{ filieres|length }}</div>
+      <div class="kpi-sub">Distinctes</div>
+    </div>
+  </div>
+
+  <!-- Podium -->
+  <div class="sec-head"><h2>Podium filières</h2><div class="sec-line"></div></div>
+  <div class="podium-grid">
+    {% if meilleure_filiere %}
+    <div class="podium best">
+      <div class="podium-icon">
+        <svg viewBox="0 0 24 24"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+      </div>
+      <div class="podium-info">
+        <div class="podium-type">Meilleure filière</div>
+        <div class="podium-name">{{ meilleure_filiere.filiere }}</div>
+        <div class="podium-moy">Moyenne : {{ "%.2f"|format(meilleure_filiere.moy) }}/20</div>
+      </div>
+    </div>
+    {% endif %}
+    {% if pire_filiere %}
+    <div class="podium worst">
+      <div class="podium-icon">
+        <svg viewBox="0 0 24 24"><polyline points="17 6 12 11 7 6"/><polyline points="17 13 12 18 7 13"/></svg>
+      </div>
+      <div class="podium-info">
+        <div class="podium-type">Filière la plus faible</div>
+        <div class="podium-name">{{ pire_filiere.filiere }}</div>
+        <div class="podium-moy">Moyenne : {{ "%.2f"|format(pire_filiere.moy) }}/20</div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Graphiques -->
+  <div class="sec-head"><h2>Visualisations</h2><div class="sec-line"></div></div>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div>
+        <div class="chart-title">Moyenne par filière</div>
+        <div class="chart-sub">Comparaison des performances</div>
+      </div>
+      <canvas id="chartFil" height="200"></canvas>
+    </div>
+    <div class="chart-card">
+      <div>
+        <div class="chart-title">Répartition des étudiants</div>
+        <div class="chart-sub">Effectifs par filière</div>
+      </div>
+      <canvas id="chartDonut" height="200"></canvas>
+    </div>
+    <div class="chart-card">
+      <div>
+        <div class="chart-title">Distribution des notes</div>
+        <div class="chart-sub">Histogramme de fréquence</div>
+      </div>
+      <canvas id="chartDist" height="200"></canvas>
+    </div>
+    <div class="chart-card">
+      <div>
+        <div class="chart-title">Top 10 étudiants</div>
+        <div class="chart-sub">Classement par moyenne</div>
+      </div>
+      <canvas id="chartTop" height="200"></canvas>
+    </div>
+  </div>
+
+  <!-- Stats descriptives -->
+  <div class="sec-head"><h2>Statistiques descriptives</h2><div class="sec-line"></div></div>
+  <div class="desc-grid">
+    <div class="desc-card">
+      <div class="desc-title">Tendance centrale</div>
+      <div class="desc-rows">
+        <div class="desc-row">
+          <span class="desc-key">Moyenne (μ)</span>
+          <div class="prog-wrap"><div class="prog-fill" id="pf-moy"></div></div>
+          <span class="desc-val" id="dv-moy">—</span>
+        </div>
+        <div class="desc-row">
+          <span class="desc-key">Médiane</span>
+          <div class="prog-wrap"><div class="prog-fill" id="pf-med"></div></div>
+          <span class="desc-val" id="dv-med">—</span>
+        </div>
+        <div class="desc-row">
+          <span class="desc-key">Mode</span>
+          <div class="prog-wrap"><div class="prog-fill" id="pf-mod"></div></div>
+          <span class="desc-val" id="dv-mod">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="desc-card">
+      <div class="desc-title">Dispersion</div>
+      <div class="desc-rows">
+        <div class="desc-row"><span class="desc-key">Variance (σ²)</span><span class="desc-val" id="dv-var">—</span></div>
+        <div class="desc-row"><span class="desc-key">Écart-type (σ)</span><span class="desc-val" id="dv-std">—</span></div>
+        <div class="desc-row"><span class="desc-key">Coef. variation</span><span class="desc-val" id="dv-cv">—</span></div>
+        <div class="desc-row"><span class="desc-key">Étendue</span><span class="desc-val" id="dv-range">—</span></div>
+      </div>
+    </div>
+    <div class="desc-card">
+      <div class="desc-title">Quartiles & Extrêmes</div>
+      <div class="desc-rows">
+        <div class="desc-row"><span class="desc-key">Minimum</span><span class="desc-val red" id="dv-min">—</span></div>
+        <div class="desc-row"><span class="desc-key">Q1 (25 %)</span><span class="desc-val" id="dv-q1">—</span></div>
+        <div class="desc-row"><span class="desc-key">Médiane (Q2)</span><span class="desc-val" id="dv-q2">—</span></div>
+        <div class="desc-row"><span class="desc-key">Q3 (75 %)</span><span class="desc-val" id="dv-q3">—</span></div>
+        <div class="desc-row"><span class="desc-key">Maximum</span><span class="desc-val green" id="dv-max">—</span></div>
+        <div class="desc-row"><span class="desc-key">IQR</span><span class="desc-val" id="dv-iqr">—</span></div>
+      </div>
+    </div>
+    <div class="desc-card">
+      <div class="desc-title">Forme & Résultats</div>
+      <div class="desc-rows">
+        <div class="desc-row"><span class="desc-key">Asymétrie</span><span class="desc-val" id="dv-skew">—</span></div>
+        <div class="desc-row"><span class="desc-key">Aplatissement</span><span class="desc-val" id="dv-kurt">—</span></div>
+        <div class="desc-row"><span class="desc-key">Taux de réussite</span><span class="desc-val green" id="dv-reu">—</span></div>
+        <div class="desc-row"><span class="desc-key">Taux d'échec</span><span class="desc-val red" id="dv-ech">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tableau filières -->
+  <div class="sec-head"><h2>Détail par filière</h2><div class="sec-line"></div></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Filière</th>
+          <th>Étudiants</th>
+          <th>Moyenne</th>
+          <th style="min-width:140px;">Performance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in filieres %}
+        <tr>
+          <td data-label="Filière" style="font-weight:600;">{{ f.filiere }}</td>
+          <td data-label="Étudiants">{{ f.nb }}</td>
+          <td data-label="Moyenne">
+            <span class="moy {% if f.moy >= 14 %}moy-h{% elif f.moy >= 10 %}moy-m{% else %}moy-l{% endif %}">
+              {{ "%.2f"|format(f.moy) }}/20
+            </span>
+          </td>
+          <td data-label="Performance">
+            <div class="prog-cell">
+              <div class="prog-bar-wrap">
+                <div class="prog-bar" style="width:{{ (f.moy / 20 * 100)|round }}%"></div>
+              </div>
+              <span class="prog-pct">{{ (f.moy / 20 * 100)|round }}%</span>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Classement -->
+  <div class="sec-head"><h2>Classement général</h2><div class="sec-line"></div></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Rang</th>
+          <th>Étudiant</th>
+          <th>Filière</th>
+          <th>Moyenne</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in classement %}
+        <tr>
+          <td data-label="Rang">
+            {% if loop.index == 1 %}<span class="rank-badge rank-1">1</span>
+            {% elif loop.index == 2 %}<span class="rank-badge rank-2">2</span>
+            {% elif loop.index == 3 %}<span class="rank-badge rank-3">3</span>
+            {% else %}<span class="rank-badge rank-n">{{ loop.index }}</span>{% endif %}
+          </td>
+          <td data-label="Étudiant">
+            <div class="stu-cell">
+              <div class="avatar">{{ e.nom[0]|upper }}{{ e.prenom[0]|upper }}</div>
+              <span>{{ e.nom }} {{ e.prenom }}</span>
+            </div>
+          </td>
+          <td data-label="Filière">{{ e.filiere }}</td>
+          <td data-label="Moyenne">
+            <span class="moy {% if e.moyenne >= 14 %}moy-h{% elif e.moyenne >= 10 %}moy-m{% else %}moy-l{% endif %}">
+              {{ "%.2f"|format(e.moyenne) }}/20
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  /* Données Jinja → JS */
+  const moyennes = [{% for e in classement %}{{ e.moyenne }}{% if not loop.last %},{% endif %}{% endfor %}];
+  const filLabels = [{% for f in filieres %}"{{ f.filiere }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  const filMoys   = [{% for f in filieres %}{{ f.moy|round(2) }}{% if not loop.last %},{% endif %}{% endfor %}];
+  const top10N    = [{% for e in classement[:10] %}"{{ e.nom[0]|upper }}.{{ e.prenom }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  const top10M    = [{% for e in classement[:10] %}{{ e.moyenne }}{% if not loop.last %},{% endif %}{% endfor %}];
+
+  const countByFil = {};
+  {% for e in classement %}
+  countByFil["{{ e.filiere }}"] = (countByFil["{{ e.filiere }}"] || 0) + 1;
+  {% endfor %}
+
+  /* Palette */
+  const palette = ['#5b7fff','#8b5cf6','#34d399','#fbbf24','#f87171','#06b6d4','#a78bfa','#f97316'];
+
+  Chart.defaults.font.family = "'Instrument Sans', sans-serif";
+  Chart.defaults.color = 'rgba(232,234,240,0.5)';
+
+  /* Bar filières */
+  new Chart(document.getElementById('chartFil'), {
+    type: 'bar',
+    data: {
+      labels: filLabels,
+      datasets: [{
+        label: 'Moyenne',
+        data: filMoys,
+        backgroundColor: filLabels.map((_,i) => palette[i % palette.length] + '99'),
+        borderColor: filLabels.map((_,i) => palette[i % palette.length]),
+        borderWidth: 1.5,
+        borderRadius: 7,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + c.parsed.y.toFixed(2) + '/20' } } },
+      scales: {
+        y: { min: 0, max: 20, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { callback: v => v + '/20' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  /* Donut */
+  new Chart(document.getElementById('chartDonut'), {
+    type: 'doughnut',
+    data: {
+      labels: filLabels,
+      datasets: [{
+        data: filLabels.map(f => countByFil[f] || 0),
+        backgroundColor: filLabels.map((_,i) => palette[i % palette.length] + 'cc'),
+        borderColor: '#111520',
+        borderWidth: 3,
+        hoverOffset: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 14, usePointStyle: true, pointStyleWidth: 8, color: 'rgba(232,234,240,0.6)' } },
+        tooltip: { callbacks: { label: c => ' ' + c.label + ' : ' + c.parsed + ' étud.' } }
+      },
+      cutout: '62%',
+    }
+  });
+
+  /* Histogramme */
+  const bins = [[0,5],[5,8],[8,10],[10,12],[12,14],[14,16],[16,18],[18,20]];
+  const binLabels = bins.map(b => b[0]+'-'+b[1]);
+  const binCounts = bins.map(([lo,hi]) => moyennes.filter(m => m >= lo && m < hi).length);
+  if (moyennes.includes(20)) binCounts[binCounts.length-1]++;
+
+  new Chart(document.getElementById('chartDist'), {
+    type: 'bar',
+    data: {
+      labels: binLabels,
+      datasets: [{
+        label: 'Effectif',
+        data: binCounts,
+        backgroundColor: bins.map(b => b[0] >= 10 ? '#5b7fff99' : '#f8717199'),
+        borderColor: bins.map(b => b[0] >= 10 ? '#5b7fff' : '#f87171'),
+        borderWidth: 1,
+        borderRadius: 5,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + c.parsed.y + ' étudiant(s)' } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { stepSize: 1 } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  /* Top 10 horizontal */
+  new Chart(document.getElementById('chartTop'), {
+    type: 'bar',
+    data: {
+      labels: top10N,
+      datasets: [{
+        label: 'Moyenne',
+        data: top10M,
+        backgroundColor: top10M.map(v => v >= 14 ? '#34d39966' : v >= 10 ? '#5b7fff99' : '#f8717166'),
+        borderColor:      top10M.map(v => v >= 14 ? '#34d399' : v >= 10 ? '#5b7fff' : '#f87171'),
+        borderWidth: 1.5,
+        borderRadius: 5,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + c.parsed.x.toFixed(2) + '/20' } } },
+      scales: {
+        x: { min: 0, max: 20, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { callback: v => v + '/20' } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+
+  /* Stats descriptives JS */
+  function mean(a)  { return a.reduce((s,v)=>s+v,0)/a.length; }
+  function sorted(a){ return [...a].sort((x,y)=>x-y); }
+  function median(a){ const s=sorted(a),n=s.length; return n%2===0?(s[n/2-1]+s[n/2])/2:s[Math.floor(n/2)]; }
+  function variance(a){ const m=mean(a); return a.reduce((s,v)=>s+Math.pow(v-m,2),0)/a.length; }
+  function stddev(a){ return Math.sqrt(variance(a)); }
+  function quantile(a,q){ const s=sorted(a),p=(s.length-1)*q,lo=Math.floor(p),hi=Math.ceil(p); return lo===hi?s[lo]:s[lo]+(s[hi]-s[lo])*(p-lo); }
+  function mode(a){ const f={}; a.forEach(v=>{f[v]=(f[v]||0)+1;}); let mx=0,m=a[0]; for(const[k,v] of Object.entries(f)){if(v>mx){mx=v;m=+k;}} return m; }
+  function skew(a){ const m=mean(a),s=stddev(a),n=a.length; return a.reduce((t,v)=>t+Math.pow((v-m)/s,3),0)/n; }
+  function kurt(a){ const m=mean(a),s=stddev(a),n=a.length; return a.reduce((t,v)=>t+Math.pow((v-m)/s,4),0)/n-3; }
+
+  if (moyennes.length > 0) {
+    const n   = moyennes.length;
+    const moy = mean(moyennes);
+    const med = median(moyennes);
+    const mod = mode(moyennes);
+    const v   = variance(moyennes);
+    const sd  = stddev(moyennes);
+    const q1  = quantile(moyennes,0.25);
+    const q2  = quantile(moyennes,0.50);
+    const q3  = quantile(moyennes,0.75);
+    const mn  = Math.min(...moyennes);
+    const mx  = Math.max(...moyennes);
+    const reu = moyennes.filter(m=>m>=10).length;
+
+    const s = (id,val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+    const p = v => Math.round(v/20*100);
+
+    s('dv-moy',  moy.toFixed(2)+'/20');
+    s('dv-med',  med.toFixed(2)+'/20');
+    s('dv-mod',  mod.toFixed(2)+'/20');
+    s('dv-var',  v.toFixed(3));
+    s('dv-std',  sd.toFixed(3));
+    s('dv-cv',   (sd/moy*100).toFixed(1)+'%');
+    s('dv-range',(mx-mn).toFixed(2));
+    s('dv-min',  mn.toFixed(2)+'/20');
+    s('dv-q1',   q1.toFixed(2)+'/20');
+    s('dv-q2',   q2.toFixed(2)+'/20');
+    s('dv-q3',   q3.toFixed(2)+'/20');
+    s('dv-max',  mx.toFixed(2)+'/20');
+    s('dv-iqr',  (q3-q1).toFixed(2));
+    s('dv-skew', skew(moyennes).toFixed(3));
+    s('dv-kurt', kurt(moyennes).toFixed(3));
+    s('dv-reu',  (reu/n*100).toFixed(1)+'% ('+reu+' étud.)');
+    s('dv-ech',  ((n-reu)/n*100).toFixed(1)+'% ('+(n-reu)+' étud.)');
+    s('kpi-reussite', (reu/n*100).toFixed(1)+'%');
+
+    document.getElementById('pf-moy').style.width = p(moy)+'%';
+    document.getElementById('pf-med').style.width = p(med)+'%';
+    document.getElementById('pf-mod').style.width = p(mod)+'%';
+  }
+</script>
+
+{% endblock %}
